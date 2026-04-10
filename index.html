@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NEPSE Live</title>
+    <style>
+        body { font-family: sans-serif; background: #07090f; color: white; padding: 20px; }
+        .status { padding: 10px; border-radius: 5px; margin-bottom: 20px; display: inline-block; }
+        .open { background: #00e5b022; color: #00e5b0; border: 1px solid #00e5b0; }
+        .closed { background: #f45b6922; color: #f45b69; border: 1px solid #f45b69; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #21283a; }
+        th { color: #5c6a82; text-transform: uppercase; font-size: 12px; }
+        tr:hover { background: #161b27; }
+    </style>
+</head>
+<body>
+    <h1>NEPSE Market Monitor</h1>
+    <div id="market-status" class="status">Checking status...</div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Symbol</th>
+                <th>LTP</th>
+                <th>Point Change</th>
+                <th>% Change</th>
+                <th>High</th>
+                <th>Low</th>
+            </tr>
+        </thead>
+        <tbody id="stock-table">
+            <tr><td colspan="6">Loading market data...</td></tr>
+        </tbody>
+    </table>
+
+    <script>
+        // 1. UPDATE THIS URL to your actual Cloudflare Worker URL
+        const PROXY_URL = 'https://nepse-proxy.your-username.workers.dev';
+
+        async function init() {
+            try {
+                // Fetch Market Status
+                const statusRes = await fetch(`${PROXY_URL}/market-open`);
+                const statusData = await statusRes.json();
+                const statusEl = document.getElementById('market-status');
+                
+                if(statusData.isOpen === "OPEN") {
+                    statusEl.innerText = "● Market is OPEN";
+                    statusEl.className = "status open";
+                } else {
+                    statusEl.innerText = "● Market is CLOSED";
+                    statusEl.className = "status closed";
+                }
+
+                // Fetch Today's Prices
+                const priceRes = await fetch(`${PROXY_URL}/today-price?size=500`);
+                const priceData = await priceRes.json();
+                renderTable(priceData.content);
+
+            } catch (err) {
+                console.error("Fetch error:", err);
+                document.getElementById('stock-table').innerHTML = `<tr><td colspan="6" style="color:red">Error: ${err.message}. Check console for details.</td></tr>`;
+            }
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('stock-table');
+            tbody.innerHTML = data.map(stock => `
+                <tr>
+                    <td><b>${stock.symbol}</b></td>
+                    <td>${stock.lastTradedPrice}</td>
+                    <td style="color:${stock.pointChange >= 0 ? '#00e5b0' : '#f45b69'}">${stock.pointChange}</td>
+                    <td style="color:${stock.percentageChange >= 0 ? '#00e5b0' : '#f45b69'}">${stock.percentageChange}%</td>
+                    <td>${stock.highPrice}</td>
+                    <td>${stock.lowPrice}</td>
+                </tr>
+            `).join('');
+        }
+
+        init();
+    </script>
+</body>
+</html>
