@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "NEPSE Live Stock Market Dashboard",
   "scripts": {
-    "dev": "vercel dev"
+    "dev": "vercel dev",
+    "start": "vercel"
   }
 }
