@@ -34,17 +34,20 @@
     </table>
 
     <script>
-        // 1. UPDATE THIS URL to your actual Cloudflare Worker URL
-        const PROXY_URL = 'https://cool-block-0b41.j38938cz.workers.dev';
+        const NEPSE = 'https://www.nepalstock.com/api/nots';
+
+        function proxyUrl(nepseUrl) {
+            return `/api/proxy?url=${encodeURIComponent(nepseUrl)}`;
+        }
 
         async function init() {
             try {
                 // Fetch Market Status
-                const statusRes = await fetch(`${PROXY_URL}/market-open`);
+                const statusRes = await fetch(proxyUrl(`${NEPSE}/nepse-data/market-open`));
                 const statusData = await statusRes.json();
                 const statusEl = document.getElementById('market-status');
-                
-                if(statusData.isOpen === "OPEN") {
+
+                if ((statusData.isOpen || '').toUpperCase() === 'OPEN') {
                     statusEl.innerText = "● Market is OPEN";
                     statusEl.className = "status open";
                 } else {
@@ -52,8 +55,12 @@
                     statusEl.className = "status closed";
                 }
 
-                // Fetch Today's Prices
-                const priceRes = await fetch(`${PROXY_URL}/today-price?size=500`);
+                // Fetch Today's Prices (POST required by NEPSE API)
+                const priceRes = await fetch(proxyUrl(`${NEPSE}/nepse-data/today-price?size=500`), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: 502946 }),
+                });
                 const priceData = await priceRes.json();
                 renderTable(priceData.content);
 
