@@ -1,90 +1,579 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>NEPSE Live</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEPSE Dashboard — Live Stock Market</title>
     <style>
-        body { font-family: sans-serif; background: #07090f; color: white; padding: 20px; }
-        .status { padding: 10px; border-radius: 5px; margin-bottom: 20px; display: inline-block; }
-        .open { background: #00e5b022; color: #00e5b0; border: 1px solid #00e5b0; }
-        .closed { background: #f45b6922; color: #f45b69; border: 1px solid #f45b69; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #21283a; }
-        th { color: #5c6a82; text-transform: uppercase; font-size: 12px; }
-        tr:hover { background: #161b27; }
+        /* === Reset & Base === */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #07090f; color: #c9d1d9; line-height: 1.5;
+        }
+        a { color: #58a6ff; text-decoration: none; }
+
+        /* === Layout === */
+        .app-header {
+            background: #0d1117; border-bottom: 1px solid #21262d;
+            padding: 16px 24px; display: flex; align-items: center;
+            justify-content: space-between; flex-wrap: wrap; gap: 12px;
+        }
+        .app-header h1 { font-size: 20px; color: #e6edf3; white-space: nowrap; }
+        .app-header h1 span { color: #00e5b0; }
+        .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px 16px; }
+
+        /* === Status Badge === */
+        .status-badge {
+            padding: 6px 14px; border-radius: 20px; font-size: 13px;
+            font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
+        }
+        .status-badge.open { background: #00e5b018; color: #00e5b0; border: 1px solid #00e5b044; }
+        .status-badge.closed { background: #f45b6918; color: #f45b69; border: 1px solid #f45b6944; }
+        .status-badge.unknown { background: #5c6a8218; color: #8b949e; border: 1px solid #5c6a8244; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+        /* === Stat Cards === */
+        .stat-cards {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px; margin-bottom: 20px;
+        }
+        .stat-card {
+            background: #161b22; border: 1px solid #21262d; border-radius: 10px;
+            padding: 16px; text-align: center;
+        }
+        .stat-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #8b949e; margin-bottom: 4px; }
+        .stat-card .value { font-size: 24px; font-weight: 700; color: #e6edf3; }
+        .stat-card .sub { font-size: 12px; color: #8b949e; margin-top: 2px; }
+        .stat-card.green .value { color: #00e5b0; }
+        .stat-card.red .value { color: #f45b69; }
+
+        /* === Movers === */
+        .movers-row {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;
+        }
+        .movers-panel {
+            background: #161b22; border: 1px solid #21262d; border-radius: 10px;
+            padding: 16px; overflow: hidden;
+        }
+        .movers-panel h3 { font-size: 14px; margin-bottom: 12px; color: #e6edf3; display: flex; align-items: center; gap: 8px; }
+        .movers-panel h3 .icon { font-size: 18px; }
+        .mover-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 0; border-bottom: 1px solid #21262d1a;
+        }
+        .mover-item:last-child { border-bottom: none; }
+        .mover-symbol { font-weight: 600; color: #e6edf3; font-size: 14px; }
+        .mover-name { font-size: 11px; color: #8b949e; }
+        .mover-change { font-weight: 600; font-size: 14px; }
+        .mover-change.pos { color: #00e5b0; }
+        .mover-change.neg { color: #f45b69; }
+        .mover-ltp { font-size: 12px; color: #8b949e; }
+
+        /* === Controls === */
+        .controls {
+            display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px;
+        }
+        .search-box {
+            flex: 1; min-width: 200px; padding: 10px 14px;
+            background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+            color: #e6edf3; font-size: 14px; outline: none;
+        }
+        .search-box:focus { border-color: #58a6ff; box-shadow: 0 0 0 3px #58a6ff22; }
+        .search-box::placeholder { color: #484f58; }
+        .filter-select {
+            padding: 10px 12px; background: #0d1117; border: 1px solid #30363d;
+            border-radius: 8px; color: #e6edf3; font-size: 13px; outline: none; cursor: pointer;
+        }
+        .filter-select:focus { border-color: #58a6ff; }
+        .btn-refresh {
+            padding: 10px 18px; background: #238636; border: 1px solid #2ea043;
+            border-radius: 8px; color: #fff; font-size: 13px; font-weight: 600;
+            cursor: pointer; white-space: nowrap;
+        }
+        .btn-refresh:hover { background: #2ea043; }
+        .btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* === Table === */
+        .table-wrap {
+            background: #0d1117; border: 1px solid #21262d; border-radius: 10px;
+            overflow-x: auto;
+        }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; }
+        thead th {
+            position: sticky; top: 0; background: #161b22;
+            padding: 12px 14px; text-align: left; font-size: 11px;
+            text-transform: uppercase; letter-spacing: 0.8px; color: #8b949e;
+            border-bottom: 1px solid #21262d; white-space: nowrap; cursor: pointer;
+            user-select: none;
+        }
+        thead th:hover { color: #e6edf3; }
+        thead th .sort-arrow { margin-left: 4px; font-size: 10px; color: #58a6ff; }
+        tbody td {
+            padding: 10px 14px; border-bottom: 1px solid #21262d0a;
+            font-size: 14px; white-space: nowrap;
+        }
+        tbody tr:hover { background: #161b2288; }
+        .col-symbol { font-weight: 600; color: #e6edf3; }
+        .col-pos { color: #00e5b0; }
+        .col-neg { color: #f45b69; }
+        .col-neutral { color: #8b949e; }
+        .highlight-high { background: #00e5b00d; }
+        .highlight-low { background: #f45b690d; }
+
+        /* === States === */
+        .state-msg {
+            text-align: center; padding: 48px 20px; color: #8b949e; font-size: 15px;
+        }
+        .state-msg.error { color: #f45b69; }
+        .state-msg .icon { font-size: 40px; display: block; margin-bottom: 12px; }
+        .spinner {
+            display: inline-block; width: 28px; height: 28px;
+            border: 3px solid #30363d; border-top-color: #58a6ff;
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* === Footer === */
+        .app-footer {
+            text-align: center; padding: 24px 16px; font-size: 12px;
+            color: #484f58; border-top: 1px solid #21262d; margin-top: 32px;
+        }
+
+        /* === Responsive === */
+        @media (max-width: 768px) {
+            .movers-row { grid-template-columns: 1fr; }
+            .stat-cards { grid-template-columns: repeat(2, 1fr); }
+            .controls { flex-direction: column; }
+            .search-box { min-width: 100%; }
+            .app-header { padding: 12px 16px; }
+            .app-header h1 { font-size: 16px; }
+        }
+        @media (max-width: 480px) {
+            .stat-cards { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
-    <h1>NEPSE Market Monitor</h1>
-    <div id="market-status" class="status">Checking status...</div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Symbol</th>
-                <th>LTP</th>
-                <th>Point Change</th>
-                <th>% Change</th>
-                <th>High</th>
-                <th>Low</th>
-            </tr>
-        </thead>
-        <tbody id="stock-table">
-            <tr><td colspan="6">Loading market data...</td></tr>
-        </tbody>
-    </table>
+<!-- Header -->
+<header class="app-header">
+    <h1>📈 <span>NEPSE</span> Dashboard</h1>
+    <div class="header-right">
+        <div id="market-status" class="status-badge unknown">
+            <span class="status-dot"></span> Loading…
+        </div>
+        <button class="btn-refresh" id="btn-refresh" onclick="refreshData()">↻ Refresh</button>
+    </div>
+</header>
 
-    <script>
-        const NEPSE = 'https://www.nepalstock.com/api/nots';
+<div class="container">
 
-        function proxyUrl(nepseUrl) {
-            return `/api/proxy?url=${encodeURIComponent(nepseUrl)}`;
-        }
+    <!-- Stat Cards -->
+    <section class="stat-cards" id="stat-cards">
+        <div class="stat-card"><div class="label">Total Stocks</div><div class="value" id="stat-total">—</div></div>
+        <div class="stat-card green"><div class="label">Advancing</div><div class="value" id="stat-adv">—</div></div>
+        <div class="stat-card red"><div class="label">Declining</div><div class="value" id="stat-dec">—</div></div>
+        <div class="stat-card green"><div class="label">Top Gainer</div><div class="value" id="stat-gainer">—</div><div class="sub" id="stat-gainer-sub"></div></div>
+        <div class="stat-card red"><div class="label">Top Loser</div><div class="value" id="stat-loser">—</div><div class="sub" id="stat-loser-sub"></div></div>
+    </section>
 
-        async function init() {
-            try {
-                // Fetch Market Status
-                const statusRes = await fetch(proxyUrl(`${NEPSE}/nepse-data/market-open`));
-                const statusData = await statusRes.json();
-                const statusEl = document.getElementById('market-status');
+    <!-- Movers -->
+    <section class="movers-row" id="movers-section" style="display:none">
+        <div class="movers-panel">
+            <h3><span class="icon">🚀</span> Best Performing</h3>
+            <div id="top-gainers"></div>
+        </div>
+        <div class="movers-panel">
+            <h3><span class="icon">📉</span> Worst Performing</h3>
+            <div id="top-losers"></div>
+        </div>
+    </section>
 
-                if ((statusData.isOpen || '').toUpperCase() === 'OPEN') {
-                    statusEl.innerText = "● Market is OPEN";
-                    statusEl.className = "status open";
-                } else {
-                    statusEl.innerText = "● Market is CLOSED";
-                    statusEl.className = "status closed";
-                }
+    <!-- Controls -->
+    <section class="controls">
+        <input type="text" class="search-box" id="search-input" placeholder="🔍 Search symbol or company…" autocomplete="off">
+        <select class="filter-select" id="filter-change">
+            <option value="all">All Changes</option>
+            <option value="positive">↑ Positive Only</option>
+            <option value="negative">↓ Negative Only</option>
+            <option value="unchanged">— Unchanged</option>
+        </select>
+        <select class="filter-select" id="filter-volume">
+            <option value="all">All Volume</option>
+            <option value="high">High Vol (>50k)</option>
+            <option value="medium">Med Vol (10k–50k)</option>
+            <option value="low">Low Vol (<10k)</option>
+        </select>
+        <select class="filter-select" id="filter-sector" style="display:none">
+            <option value="all">All Sectors</option>
+        </select>
+    </section>
 
-                // Fetch Today's Prices (POST required by NEPSE API)
-                const priceRes = await fetch(proxyUrl(`${NEPSE}/nepse-data/today-price?size=500`), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: 502946 }),
-                });
-                const priceData = await priceRes.json();
-                renderTable(priceData.content);
-
-            } catch (err) {
-                console.error("Fetch error:", err);
-                document.getElementById('stock-table').innerHTML = `<tr><td colspan="6" style="color:red">Error: ${err.message}. Check console for details.</td></tr>`;
-            }
-        }
-
-        function renderTable(data) {
-            const tbody = document.getElementById('stock-table');
-            tbody.innerHTML = data.map(stock => `
-                <tr>
-                    <td><b>${stock.symbol}</b></td>
-                    <td>${stock.lastTradedPrice}</td>
-                    <td style="color:${stock.pointChange >= 0 ? '#00e5b0' : '#f45b69'}">${stock.pointChange}</td>
-                    <td style="color:${stock.percentageChange >= 0 ? '#00e5b0' : '#f45b69'}">${stock.percentageChange}%</td>
-                    <td>${stock.highPrice}</td>
-                    <td>${stock.lowPrice}</td>
+    <!-- Table -->
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr id="table-head">
+                    <th data-key="symbol">Symbol</th>
+                    <th data-key="name">Company</th>
+                    <th data-key="lastTradedPrice" data-type="num">LTP</th>
+                    <th data-key="pointChange" data-type="num">Change</th>
+                    <th data-key="percentageChange" data-type="num">% Change</th>
+                    <th data-key="highPrice" data-type="num">High</th>
+                    <th data-key="lowPrice" data-type="num">Low</th>
+                    <th data-key="totalTradeQuantity" data-type="num">Volume</th>
+                    <th data-key="totalTurnover" data-type="num">Turnover</th>
                 </tr>
-            `).join('');
-        }
+            </thead>
+            <tbody id="stock-table">
+                <tr><td colspan="9" class="state-msg"><div class="spinner"></div><br>Loading market data…</td></tr>
+            </tbody>
+        </table>
+    </div>
 
-        init();
-    </script>
+    <!-- Footer -->
+    <footer class="app-footer">
+        NEPSE Dashboard &middot; Data sourced from nepalstock.com via proxy &middot; Auto-cached for 60 s
+    </footer>
+</div>
+
+<script>
+/* =====================================================
+   NEPSE Dashboard — modules: fetch, normalize, state,
+   filters, sorting, rendering
+   ===================================================== */
+
+// ── Config ──
+const NEPSE = 'https://www.nepalstock.com/api/nots';
+function proxyUrl(u) { return '/api/proxy?url=' + encodeURIComponent(u); }
+
+// ── App State ──
+const state = {
+    raw: [],           // original normalized rows
+    filtered: [],      // after search + filters
+    sortKey: 'symbol',
+    sortAsc: true,
+    searchTerm: '',
+    filterChange: 'all',
+    filterVolume: 'all',
+    filterSector: 'all',
+    loading: true,
+    error: null,
+};
+
+// ── Data Fetch ──
+async function fetchJSON(url, opts) {
+    const res = await fetch(url, opts);
+    if (!res.ok) {
+        let detail = '';
+        try { const j = await res.json(); detail = j.error || j.detail || ''; } catch { /* ignore */ }
+        throw new Error(detail || 'HTTP ' + res.status);
+    }
+    return res.json();
+}
+
+async function fetchMarketStatus() {
+    try {
+        const d = await fetchJSON(proxyUrl(NEPSE + '/nepse-data/market-open'));
+        return d && typeof d === 'object' ? d : {};
+    } catch {
+        return {};
+    }
+}
+
+async function fetchTodayPrices() {
+    const d = await fetchJSON(proxyUrl(NEPSE + '/nepse-data/today-price?size=500'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 502946 }),
+    });
+    return d;
+}
+
+// ── Normalize ──
+function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function str(v) { return v == null ? '' : String(v).trim(); }
+
+function normalizeRows(raw) {
+    // raw may be { content: [...] } or just [...]
+    let arr = [];
+    if (Array.isArray(raw)) arr = raw;
+    else if (raw && Array.isArray(raw.content)) arr = raw.content;
+    else return [];
+
+    return arr.map(r => ({
+        symbol:             str(r.symbol),
+        name:               str(r.securityName || r.companyName || r.name || r.symbol),
+        sector:             str(r.sectorName || r.sector || ''),
+        lastTradedPrice:    num(r.lastTradedPrice || r.closingPrice || r.ltp),
+        pointChange:        num(r.pointChange || r.change),
+        percentageChange:   num(r.percentageChange || r.pChange || r.changePercent),
+        highPrice:          num(r.highPrice || r.dayHigh),
+        lowPrice:           num(r.lowPrice || r.dayLow),
+        openPrice:          num(r.openPrice || r.open),
+        previousClose:      num(r.previousClose || r.previousDay),
+        totalTradeQuantity: num(r.totalTradeQuantity || r.totalTradedQuantity || r.volume),
+        totalTurnover:      num(r.totalTurnover || r.turnover || r.amount),
+        fiftyTwoWeekHigh:   r.fiftyTwoWeekHigh != null ? num(r.fiftyTwoWeekHigh) : null,
+        fiftyTwoWeekLow:    r.fiftyTwoWeekLow != null ? num(r.fiftyTwoWeekLow) : null,
+    })).filter(r => r.symbol);
+}
+
+// ── Filters ──
+function applyFilters() {
+    let rows = state.raw.slice();
+
+    // search
+    if (state.searchTerm) {
+        const q = state.searchTerm.toLowerCase();
+        rows = rows.filter(r =>
+            r.symbol.toLowerCase().includes(q) ||
+            r.name.toLowerCase().includes(q)
+        );
+    }
+
+    // change filter
+    if (state.filterChange === 'positive') rows = rows.filter(r => r.pointChange > 0);
+    else if (state.filterChange === 'negative') rows = rows.filter(r => r.pointChange < 0);
+    else if (state.filterChange === 'unchanged') rows = rows.filter(r => r.pointChange === 0);
+
+    // volume filter
+    if (state.filterVolume === 'high') rows = rows.filter(r => r.totalTradeQuantity > 50000);
+    else if (state.filterVolume === 'medium') rows = rows.filter(r => r.totalTradeQuantity >= 10000 && r.totalTradeQuantity <= 50000);
+    else if (state.filterVolume === 'low') rows = rows.filter(r => r.totalTradeQuantity < 10000);
+
+    // sector filter
+    if (state.filterSector !== 'all') rows = rows.filter(r => r.sector === state.filterSector);
+
+    // sort
+    rows.sort((a, b) => {
+        let va = a[state.sortKey], vb = b[state.sortKey];
+        if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+        if (va < vb) return state.sortAsc ? -1 : 1;
+        if (va > vb) return state.sortAsc ? 1 : -1;
+        return 0;
+    });
+
+    state.filtered = rows;
+}
+
+// ── Rendering ──
+function renderStatus(data) {
+    const el = document.getElementById('market-status');
+    if (data && (String(data.isOpen || '')).toUpperCase() === 'OPEN') {
+        el.className = 'status-badge open';
+        el.innerHTML = '<span class="status-dot"></span> Market OPEN';
+    } else if (data && data.isOpen != null) {
+        el.className = 'status-badge closed';
+        el.innerHTML = '<span class="status-dot"></span> Market CLOSED';
+    } else {
+        el.className = 'status-badge unknown';
+        el.innerHTML = '<span class="status-dot"></span> Status unknown';
+    }
+}
+
+function renderStats() {
+    const rows = state.raw;
+    document.getElementById('stat-total').textContent = rows.length || '—';
+
+    const adv = rows.filter(r => r.pointChange > 0).length;
+    const dec = rows.filter(r => r.pointChange < 0).length;
+    document.getElementById('stat-adv').textContent = adv || '0';
+    document.getElementById('stat-dec').textContent = dec || '0';
+
+    if (rows.length) {
+        const sorted = rows.slice().sort((a, b) => b.percentageChange - a.percentageChange);
+        const best = sorted[0];
+        const worst = sorted[sorted.length - 1];
+        document.getElementById('stat-gainer').textContent = best.symbol;
+        document.getElementById('stat-gainer-sub').textContent = '+' + best.percentageChange.toFixed(2) + '%';
+        document.getElementById('stat-loser').textContent = worst.symbol;
+        document.getElementById('stat-loser-sub').textContent = worst.percentageChange.toFixed(2) + '%';
+    } else {
+        document.getElementById('stat-gainer').textContent = '—';
+        document.getElementById('stat-gainer-sub').textContent = '';
+        document.getElementById('stat-loser').textContent = '—';
+        document.getElementById('stat-loser-sub').textContent = '';
+    }
+}
+
+function renderMovers() {
+    const section = document.getElementById('movers-section');
+    if (!state.raw.length) { section.style.display = 'none'; return; }
+    section.style.display = '';
+
+    const sorted = state.raw.slice().sort((a, b) => b.percentageChange - a.percentageChange);
+    const top5 = sorted.slice(0, 5);
+    const bottom5 = sorted.slice(-5).reverse();
+
+    document.getElementById('top-gainers').innerHTML = top5.map(moverHTML).join('');
+    document.getElementById('top-losers').innerHTML = bottom5.map(moverHTML).join('');
+}
+
+function moverHTML(r) {
+    const cls = r.percentageChange >= 0 ? 'pos' : 'neg';
+    const sign = r.percentageChange >= 0 ? '+' : '';
+    return `<div class="mover-item">
+        <div><div class="mover-symbol">${esc(r.symbol)}</div><div class="mover-name">${esc(r.name)}</div></div>
+        <div style="text-align:right"><div class="mover-change ${cls}">${sign}${r.percentageChange.toFixed(2)}%</div><div class="mover-ltp">LTP ${fmtNum(r.lastTradedPrice)}</div></div>
+    </div>`;
+}
+
+function renderSectors() {
+    const sectors = [...new Set(state.raw.map(r => r.sector).filter(Boolean))].sort();
+    const sel = document.getElementById('filter-sector');
+    if (sectors.length > 1) {
+        sel.style.display = '';
+        sel.innerHTML = '<option value="all">All Sectors</option>' +
+            sectors.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    } else {
+        sel.style.display = 'none';
+    }
+}
+
+function renderTableHead() {
+    document.querySelectorAll('#table-head th').forEach(th => {
+        const key = th.dataset.key;
+        const arrow = document.createElement('span');
+        arrow.className = 'sort-arrow';
+        // remove old arrows
+        th.querySelectorAll('.sort-arrow').forEach(a => a.remove());
+        if (key === state.sortKey) {
+            arrow.textContent = state.sortAsc ? ' ▲' : ' ▼';
+            th.appendChild(arrow);
+        }
+    });
+}
+
+function renderTable() {
+    const tbody = document.getElementById('stock-table');
+    const rows = state.filtered;
+
+    if (state.loading) {
+        tbody.innerHTML = '<tr><td colspan="9" class="state-msg"><div class="spinner"></div><br>Loading market data…</td></tr>';
+        return;
+    }
+    if (state.error) {
+        tbody.innerHTML = `<tr><td colspan="9" class="state-msg error"><span class="icon">⚠️</span>${esc(state.error)}<br><small>Tap Refresh to retry.</small></td></tr>`;
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="state-msg"><span class="icon">📭</span>No stocks match your filters.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = rows.map(r => {
+        const chgCls = r.pointChange > 0 ? 'col-pos' : r.pointChange < 0 ? 'col-neg' : 'col-neutral';
+        const sign = r.pointChange > 0 ? '+' : '';
+        let rowCls = '';
+        if (r.highPrice && r.lastTradedPrice === r.highPrice) rowCls = 'highlight-high';
+        else if (r.lowPrice && r.lastTradedPrice === r.lowPrice) rowCls = 'highlight-low';
+
+        return `<tr class="${rowCls}">
+            <td class="col-symbol">${esc(r.symbol)}</td>
+            <td>${esc(r.name)}</td>
+            <td>${fmtNum(r.lastTradedPrice)}</td>
+            <td class="${chgCls}">${sign}${r.pointChange.toFixed(2)}</td>
+            <td class="${chgCls}">${sign}${r.percentageChange.toFixed(2)}%</td>
+            <td>${r.highPrice ? fmtNum(r.highPrice) : '—'}</td>
+            <td>${r.lowPrice ? fmtNum(r.lowPrice) : '—'}</td>
+            <td>${fmtVol(r.totalTradeQuantity)}</td>
+            <td>${fmtTurnover(r.totalTurnover)}</td>
+        </tr>`;
+    }).join('');
+}
+
+// ── Helpers ──
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+function fmtNum(n) { return n != null && n !== 0 ? n.toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'; }
+function fmtVol(n) { return n ? n.toLocaleString() : '—'; }
+function fmtTurnover(n) {
+    if (!n) return '—';
+    if (n >= 1e7) return (n / 1e7).toFixed(2) + ' Cr';
+    if (n >= 1e5) return (n / 1e5).toFixed(2) + ' L';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + ' K';
+    return n.toLocaleString();
+}
+
+function fullRender() {
+    applyFilters();
+    renderStats();
+    renderMovers();
+    renderTableHead();
+    renderTable();
+}
+
+// ── Events ──
+document.getElementById('search-input').addEventListener('input', e => {
+    state.searchTerm = e.target.value;
+    applyFilters(); renderTable();
+});
+document.getElementById('filter-change').addEventListener('change', e => {
+    state.filterChange = e.target.value;
+    applyFilters(); renderTable();
+});
+document.getElementById('filter-volume').addEventListener('change', e => {
+    state.filterVolume = e.target.value;
+    applyFilters(); renderTable();
+});
+document.getElementById('filter-sector').addEventListener('change', e => {
+    state.filterSector = e.target.value;
+    applyFilters(); renderTable();
+});
+
+// sorting
+document.querySelectorAll('#table-head th').forEach(th => {
+    th.addEventListener('click', () => {
+        const key = th.dataset.key;
+        if (!key) return;
+        if (state.sortKey === key) state.sortAsc = !state.sortAsc;
+        else { state.sortKey = key; state.sortAsc = key === 'symbol' || key === 'name'; }
+        fullRender();
+    });
+});
+
+// ── Init ──
+async function init() {
+    state.loading = true;
+    state.error = null;
+    renderTable();
+    document.getElementById('btn-refresh').disabled = true;
+
+    // fetch in parallel; status is non-blocking
+    const [statusData, priceResult] = await Promise.allSettled([
+        fetchMarketStatus(),
+        fetchTodayPrices(),
+    ]);
+
+    // render status
+    renderStatus(statusData.status === 'fulfilled' ? statusData.value : null);
+
+    // handle prices
+    if (priceResult.status === 'fulfilled') {
+        state.raw = normalizeRows(priceResult.value);
+        state.error = state.raw.length === 0 ? 'No stock data returned by NEPSE. Market may be closed or data unavailable.' : null;
+    } else {
+        state.raw = [];
+        state.error = 'Failed to load market data: ' + (priceResult.reason && priceResult.reason.message ? priceResult.reason.message : 'Unknown error');
+    }
+
+    state.loading = false;
+    renderSectors();
+    fullRender();
+    document.getElementById('btn-refresh').disabled = false;
+}
+
+function refreshData() { init(); }
+
+// start
+init();
+</script>
 </body>
 </html>

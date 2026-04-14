@@ -21,7 +21,13 @@ export default function handler(req, res) {
     return res.status(403).json({ error: 'Only nepalstock.com is allowed' });
   }
 
-  const parsed = new URL(decoded);
+  let parsed;
+  try {
+    parsed = new URL(decoded);
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL' });
+  }
+
   const isPost = req.method === 'POST';
   const bodyStr = (isPost && req.body) ? JSON.stringify(req.body) : null;
 
@@ -33,10 +39,10 @@ export default function handler(req, res) {
       'Accept': 'application/json, text/plain, */*',
       'Accept-Language': 'en-US,en;q=0.9',
       'Content-Type': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
       'Referer': 'https://www.nepalstock.com/',
       'Origin': 'https://www.nepalstock.com',
-      'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24"',
+      'sec-ch-ua': '"Chromium";v="130", "Not?A_Brand";v="99"',
       'sec-ch-ua-mobile': '?0',
       'sec-ch-ua-platform': '"Windows"',
       'sec-fetch-dest': 'empty',
@@ -46,29 +52,48 @@ export default function handler(req, res) {
     },
   };
 
+  let responded = false;
+
   const nepseReq = https.request(options, (nepseRes) => {
     let data = '';
     nepseRes.on('data', chunk => { data += chunk; });
     nepseRes.on('end', () => {
+      if (responded) return;
+      responded = true;
       res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
       res.setHeader('Content-Type', 'application/json');
-      res.status(nepseRes.statusCode || 200);
+
+      const upstream = nepseRes.statusCode || 200;
+      if (upstream >= 400) {
+        return res.status(upstream).json({
+          error: `Upstream returned ${upstream}`,
+          detail: data.substring(0, 500),
+        });
+      }
+
       try {
-        res.json(JSON.parse(data));
+        res.status(200).json(JSON.parse(data));
       } catch {
-        res.send(data);
+        res.status(502).json({
+          error: 'Invalid JSON from upstream',
+          detail: data.substring(0, 500),
+        });
       }
     });
   });
 
   nepseReq.on('error', (err) => {
+    if (responded) return;
+    responded = true;
     console.error('NEPSE proxy error:', err.message);
-    res.status(500).json({ error: 'Proxy request failed', detail: err.message });
+    res.status(502).json({ error: 'Proxy request failed', detail: err.message });
   });
 
-  nepseReq.setTimeout(10000, () => {
+  nepseReq.setTimeout(15000, () => {
     nepseReq.destroy();
-    res.status(504).json({ error: 'NEPSE timed out' });
+    if (responded) return;
+    responded = true;
+    res.status(504).json({ error: 'NEPSE request timed out' });
   });
 
   if (bodyStr) nepseReq.write(bodyStr);
