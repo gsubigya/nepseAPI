@@ -10,7 +10,7 @@ const SYSTEM_CA_PATHS = [
 const getSystemCaBundle = () => {
   for (const p of SYSTEM_CA_PATHS) {
     try {
-      if (fs.existsSync(p)) return fs.readFileSync(p, 'utf8');
+      return fs.readFileSync(p, 'utf8');
     } catch {
       // ignore and try the next common location
     }
@@ -85,7 +85,11 @@ export default function handler(req, res) {
   let responded = false;
 
   const sendRequest = (useSystemCaRetry = false) => {
-    const reqOptions = (useSystemCaRetry && systemCaAgent) ? { ...options, agent: systemCaAgent } : options;
+    const reqOptions = {
+      ...options,
+      headers: { ...options.headers },
+      ...(useSystemCaRetry && systemCaAgent ? { agent: systemCaAgent } : {}),
+    };
     const nepseReq = https.request(reqOptions, (nepseRes) => {
       let data = '';
       nepseRes.on('data', chunk => { data += chunk; });
