@@ -136,5 +136,5 @@ export default function handler(req, res) {
     nepseReq.end();
   };
 
-  sendRequest(true);
+  sendRequest(false);
 }
