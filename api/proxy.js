@@ -1,5 +1,7 @@
 import https from 'https';
 
+const insecureAgent = new https.Agent({ rejectUnauthorized: false });
+
 export const config = {
   api: {
     bodyParser: true,
@@ -52,50 +54,68 @@ export default function handler(req, res) {
     },
   };
 
+  const isTlsChainError = (err) => {
+    const msg = String(err?.message || '').toLowerCase();
+    return (
+      err?.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
+      err?.code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' ||
+      msg.includes('unable to verify the first certificate')
+    );
+  };
+
   let responded = false;
 
-  const nepseReq = https.request(options, (nepseRes) => {
-    let data = '';
-    nepseRes.on('data', chunk => { data += chunk; });
-    nepseRes.on('end', () => {
+  const sendRequest = (allowInsecureRetry = true) => {
+    const reqOptions = allowInsecureRetry ? options : { ...options, agent: insecureAgent };
+    const nepseReq = https.request(reqOptions, (nepseRes) => {
+      let data = '';
+      nepseRes.on('data', chunk => { data += chunk; });
+      nepseRes.on('end', () => {
+        if (responded) return;
+        responded = true;
+        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
+        res.setHeader('Content-Type', 'application/json');
+
+        const upstream = nepseRes.statusCode || 200;
+        if (upstream >= 400) {
+          return res.status(upstream).json({
+            error: `Upstream returned ${upstream}`,
+            detail: data.substring(0, 500),
+          });
+        }
+
+        try {
+          res.status(200).json(JSON.parse(data));
+        } catch {
+          res.status(502).json({
+            error: 'Invalid JSON from upstream',
+            detail: data.substring(0, 500),
+          });
+        }
+      });
+    });
+
+    nepseReq.on('error', (err) => {
+      if (responded) return;
+      if (allowInsecureRetry && isTlsChainError(err)) {
+        console.warn('NEPSE proxy TLS verification failed; retrying with relaxed TLS:', err.message);
+        return sendRequest(false);
+      }
+      responded = true;
+      console.error('NEPSE proxy error:', err.message);
+      res.status(502).json({ error: 'Proxy request failed', detail: err.message });
+    });
+
+    nepseReq.setTimeout(15000, () => {
+      nepseReq.destroy();
       if (responded) return;
       responded = true;
-      res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
-      res.setHeader('Content-Type', 'application/json');
-
-      const upstream = nepseRes.statusCode || 200;
-      if (upstream >= 400) {
-        return res.status(upstream).json({
-          error: `Upstream returned ${upstream}`,
-          detail: data.substring(0, 500),
-        });
-      }
-
-      try {
-        res.status(200).json(JSON.parse(data));
-      } catch {
-        res.status(502).json({
-          error: 'Invalid JSON from upstream',
-          detail: data.substring(0, 500),
-        });
-      }
+      res.status(504).json({ error: 'NEPSE request timed out' });
     });
-  });
 
-  nepseReq.on('error', (err) => {
-    if (responded) return;
-    responded = true;
-    console.error('NEPSE proxy error:', err.message);
-    res.status(502).json({ error: 'Proxy request failed', detail: err.message });
-  });
+    if (bodyStr) nepseReq.write(bodyStr);
+    nepseReq.end();
+  };
 
-  nepseReq.setTimeout(15000, () => {
-    nepseReq.destroy();
-    if (responded) return;
-    responded = true;
-    res.status(504).json({ error: 'NEPSE request timed out' });
-  });
-
-  if (bodyStr) nepseReq.write(bodyStr);
-  nepseReq.end();
+  sendRequest(true);
 }
