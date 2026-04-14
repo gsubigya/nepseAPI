@@ -1,4 +1,25 @@
+import fs from 'fs';
 import https from 'https';
+
+const SYSTEM_CA_PATHS = [
+  '/etc/ssl/certs/ca-certificates.crt',
+  '/etc/pki/tls/certs/ca-bundle.crt',
+  '/etc/ssl/ca-bundle.pem',
+];
+
+const getSystemCaBundle = () => {
+  for (const p of SYSTEM_CA_PATHS) {
+    try {
+      return fs.readFileSync(p, 'utf8');
+    } catch {
+      // ignore and try the next common location
+    }
+  }
+  return null;
+};
+
+const systemCaBundle = getSystemCaBundle();
+const systemCaAgent = systemCaBundle ? new https.Agent({ ca: systemCaBundle }) : null;
 
 export const config = {
   api: {
@@ -52,50 +73,72 @@ export default function handler(req, res) {
     },
   };
 
+  const isTlsChainError = (err) => {
+    const msg = String(err?.message || '').toLowerCase();
+    return (
+      err?.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
+      err?.code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' ||
+      msg.includes('unable to verify the first certificate')
+    );
+  };
+
   let responded = false;
 
-  const nepseReq = https.request(options, (nepseRes) => {
-    let data = '';
-    nepseRes.on('data', chunk => { data += chunk; });
-    nepseRes.on('end', () => {
+  const sendRequest = (useSystemCaRetry = false) => {
+    const reqOptions = {
+      ...options,
+      headers: { ...options.headers },
+      ...(useSystemCaRetry && systemCaAgent ? { agent: systemCaAgent } : {}),
+    };
+    const nepseReq = https.request(reqOptions, (nepseRes) => {
+      let data = '';
+      nepseRes.on('data', chunk => { data += chunk; });
+      nepseRes.on('end', () => {
+        if (responded) return;
+        responded = true;
+        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
+        res.setHeader('Content-Type', 'application/json');
+
+        const upstream = nepseRes.statusCode || 200;
+        if (upstream >= 400) {
+          return res.status(upstream).json({
+            error: `Upstream returned ${upstream}`,
+            detail: data.substring(0, 500),
+          });
+        }
+
+        try {
+          res.status(200).json(JSON.parse(data));
+        } catch {
+          res.status(502).json({
+            error: 'Invalid JSON from upstream',
+            detail: data.substring(0, 500),
+          });
+        }
+      });
+    });
+
+    nepseReq.on('error', (err) => {
+      if (responded) return;
+      if (!useSystemCaRetry && systemCaAgent && isTlsChainError(err)) {
+        console.warn('NEPSE proxy TLS verification failed; retrying with system CA bundle:', err.message);
+        return sendRequest(true);
+      }
+      responded = true;
+      console.error('NEPSE proxy error:', err.message);
+      res.status(502).json({ error: 'Proxy request failed', detail: err.message });
+    });
+
+    nepseReq.setTimeout(15000, () => {
+      nepseReq.destroy();
       if (responded) return;
       responded = true;
-      res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
-      res.setHeader('Content-Type', 'application/json');
-
-      const upstream = nepseRes.statusCode || 200;
-      if (upstream >= 400) {
-        return res.status(upstream).json({
-          error: `Upstream returned ${upstream}`,
-          detail: data.substring(0, 500),
-        });
-      }
-
-      try {
-        res.status(200).json(JSON.parse(data));
-      } catch {
-        res.status(502).json({
-          error: 'Invalid JSON from upstream',
-          detail: data.substring(0, 500),
-        });
-      }
+      res.status(504).json({ error: 'NEPSE request timed out' });
     });
-  });
 
-  nepseReq.on('error', (err) => {
-    if (responded) return;
-    responded = true;
-    console.error('NEPSE proxy error:', err.message);
-    res.status(502).json({ error: 'Proxy request failed', detail: err.message });
-  });
+    if (bodyStr) nepseReq.write(bodyStr);
+    nepseReq.end();
+  };
 
-  nepseReq.setTimeout(15000, () => {
-    nepseReq.destroy();
-    if (responded) return;
-    responded = true;
-    res.status(504).json({ error: 'NEPSE request timed out' });
-  });
-
-  if (bodyStr) nepseReq.write(bodyStr);
-  nepseReq.end();
+  sendRequest(false);
 }
