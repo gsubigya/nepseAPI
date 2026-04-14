@@ -1,6 +1,25 @@
+import fs from 'fs';
 import https from 'https';
 
-const insecureAgent = new https.Agent({ rejectUnauthorized: false });
+const SYSTEM_CA_PATHS = [
+  '/etc/ssl/certs/ca-certificates.crt',
+  '/etc/pki/tls/certs/ca-bundle.crt',
+  '/etc/ssl/ca-bundle.pem',
+];
+
+const getSystemCaBundle = () => {
+  for (const p of SYSTEM_CA_PATHS) {
+    try {
+      if (fs.existsSync(p)) return fs.readFileSync(p, 'utf8');
+    } catch {
+      // ignore and try the next common location
+    }
+  }
+  return null;
+};
+
+const systemCaBundle = getSystemCaBundle();
+const systemCaAgent = systemCaBundle ? new https.Agent({ ca: systemCaBundle }) : null;
 
 export const config = {
   api: {
@@ -65,8 +84,8 @@ export default function handler(req, res) {
 
   let responded = false;
 
-  const sendRequest = (allowInsecureRetry = true) => {
-    const reqOptions = allowInsecureRetry ? options : { ...options, agent: insecureAgent };
+  const sendRequest = (useSystemCaRetry = false) => {
+    const reqOptions = (useSystemCaRetry && systemCaAgent) ? { ...options, agent: systemCaAgent } : options;
     const nepseReq = https.request(reqOptions, (nepseRes) => {
       let data = '';
       nepseRes.on('data', chunk => { data += chunk; });
@@ -97,9 +116,9 @@ export default function handler(req, res) {
 
     nepseReq.on('error', (err) => {
       if (responded) return;
-      if (allowInsecureRetry && isTlsChainError(err)) {
-        console.warn('NEPSE proxy TLS verification failed; retrying with relaxed TLS:', err.message);
-        return sendRequest(false);
+      if (!useSystemCaRetry && systemCaAgent && isTlsChainError(err)) {
+        console.warn('NEPSE proxy TLS verification failed; retrying with system CA bundle:', err.message);
+        return sendRequest(true);
       }
       responded = true;
       console.error('NEPSE proxy error:', err.message);

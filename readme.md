@@ -30,7 +30,7 @@ The browser cannot call `https://www.nepalstock.com` directly due to CORS restri
 `api/proxy.js` is a Vercel serverless function that:
 - Accepts a `?url=` query parameter pointing to a `nepalstock.com` endpoint
 - Forwards the request (with the required headers) to NEPSE
-- Retries once with relaxed TLS only when the upstream certificate chain cannot be verified in the runtime
+- Retries once using the runtime’s system CA bundle when the upstream certificate chain cannot be verified initially
 - Returns the JSON response to the browser
 - Returns consistent JSON error payloads on failure (never raw text)
 
