@@ -236,7 +236,7 @@
 
     <!-- Footer -->
     <footer class="app-footer">
-        NEPSE Dashboard &middot; Data sourced from nepalstock.com via proxy &middot; Auto-cached for 60 s
+        NEPSE Dashboard &middot; Data sourced from nepalstock.com via proxy &middot; Auto-cached for 60s
     </footer>
 </div>
 
@@ -492,7 +492,11 @@ function esc(s) {
     d.textContent = s;
     return d.innerHTML;
 }
-function fmtNum(n) { return n != null && n !== 0 ? n.toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'; }
+function fmtNum(n) {
+    if (n == null || n === 0) return '—';
+    try { return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    catch { return n.toFixed(2); }
+}
 function fmtVol(n) { return n ? n.toLocaleString() : '—'; }
 function fmtTurnover(n) {
     if (!n) return '—';
